@@ -177,7 +177,7 @@ impl Table for Message {
             "
         )))
         .unwrap_or(db.prepare(&format!(
-            // macOS Catalina, iOS 13 and older 
+            // macOS Catalina, iOS 13 and older
             "SELECT
                  *,
                  c.chat_id,
@@ -311,13 +311,13 @@ impl Cacheable for Message {
 
         // Create query, independent of table schema
         let statement = db.prepare(&format!(
-            "SELECT 
-                 *, 
-                 c.chat_id, 
+            "SELECT
+                 *,
+                 c.chat_id,
                  (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                  (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
-             FROM 
-                 message as m 
+             FROM
+                 message as m
              LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
              WHERE m.associated_message_guid NOT NULL
             "
@@ -421,7 +421,7 @@ impl Message {
     /// ```
     /// use imessage_database::message_types::text_effects::TextEffect;
     /// use imessage_database::tables::messages::{models::{TextAttributes, BubbleComponent, AttachmentMeta}};
-    ///  
+    ///
     /// let result = vec![
     ///     BubbleComponent::Attachment(AttachmentMeta::default()),
     ///     BubbleComponent::Text(vec![TextAttributes::new(3, 24, TextEffect::Default)]),
@@ -675,8 +675,8 @@ impl Message {
     pub fn get_count(db: &Connection, context: &QueryContext) -> Result<u64, TableError> {
         let mut statement = if context.has_filters() {
             db.prepare(&format!(
-                "SELECT 
-                    COUNT(*) 
+                "SELECT
+                    COUNT(*)
                  FROM {MESSAGE} as m
                  LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
                  {}",
@@ -751,7 +751,7 @@ impl Message {
     }
 
     /// See [`Tapback`] for details on this data.
-    pub fn clean_associated_guid(&self) -> Option<(usize, &str)> {
+    pub(crate) fn clean_associated_guid(&self) -> Option<(usize, &str)> {
         if let Some(guid) = &self.associated_message_guid {
             if guid.starts_with("p:") {
                 let mut split = guid.split('/');
@@ -787,16 +787,16 @@ impl Message {
             let filter: Vec<String> = rxs.iter().map(|guid| format!("\"{guid}\"")).collect();
             // Create query
             let mut statement = db.prepare(&format!(
-                "SELECT 
-                        *, 
-                        c.chat_id, 
+                "SELECT
+                        *,
+                        c.chat_id,
                         (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                         (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
-                    FROM 
-                        message as m 
+                    FROM
+                        message as m
                     LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
                     WHERE m.guid IN ({})
-                    ORDER BY 
+                    ORDER BY
                         m.date;
                     ",
                 filter.join(",")
@@ -829,16 +829,16 @@ impl Message {
         // No need to hit the DB if we know we don't have replies
         if self.has_replies() {
             let mut statement = db.prepare(&format!(
-                "SELECT 
-                     *, 
-                     c.chat_id, 
+                "SELECT
+                     *,
+                     c.chat_id,
                      (SELECT COUNT(*) FROM {MESSAGE_ATTACHMENT_JOIN} a WHERE m.ROWID = a.message_id) as num_attachments,
                      (SELECT COUNT(*) FROM {MESSAGE} m2 WHERE m2.thread_originator_guid = m.guid) as num_replies
-                 FROM 
-                     message as m 
-                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id 
+                 FROM
+                     message as m
+                 LEFT JOIN {CHAT_MESSAGE_JOIN} as c ON m.ROWID = c.message_id
                  WHERE m.thread_originator_guid = \"{}\"
-                 ORDER BY 
+                 ORDER BY
                      m.date;
                 ", self.guid
             ))
@@ -867,7 +867,7 @@ impl Message {
     ///
     /// For example, a Bundle ID like `com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.SafetyMonitorApp.SafetyMonitorMessages`
     /// should get parsed into `com.apple.SafetyMonitorApp.SafetyMonitorMessages`.
-    pub fn parse_balloon_bundle_id(&self) -> Option<&str> {
+    pub(crate) fn parse_balloon_bundle_id(&self) -> Option<&str> {
         if let Some(bundle_id) = &self.balloon_bundle_id {
             let mut parts = bundle_id.split(':');
             let bundle_id = parts.next();
@@ -987,7 +987,7 @@ impl Message {
             return match service_name.trim() {
                 "iMessage" => Service::iMessage,
                 "SMS" => Service::SMS,
-                "rcs" | "RCS" => Service::RCS,
+                "rcs" => Service::RCS,
                 service_name => Service::Other(service_name),
             };
         }
@@ -1025,10 +1025,11 @@ impl Message {
     ///
     /// This column contains data used by [`HandwrittenMessage`](crate::message_types::handwriting::HandwrittenMessage)s.
     pub fn raw_payload_data(&self, db: &Connection) -> Option<Vec<u8>> {
-        let mut buf = Vec::new();
-        self.get_blob(db, MESSAGE_PAYLOAD)?
-            .read_to_end(&mut buf)
-            .ok()?;
+        let mut blob = self.get_blob(db, MESSAGE_PAYLOAD)?;
+        let mut buf = Vec::with_capacity(blob.len());
+
+        blob.read_to_end(&mut buf).ok()?;
+
         Some(buf)
     }
 
@@ -1049,10 +1050,11 @@ impl Message {
     ///
     /// This column contains the message's body text with any other attributes.
     pub fn attributed_body(&self, db: &Connection) -> Option<Vec<u8>> {
-        let mut body = vec![];
-        self.get_blob(db, ATTRIBUTED_BODY)?
-            .read_to_end(&mut body)
-            .ok();
+        let mut blob = self.get_blob(db, ATTRIBUTED_BODY)?;
+        let mut buf = Vec::with_capacity(blob.len());
+
+        blob.read_to_end(&mut buf).ok()?;
+
         Some(body)
     }
 
