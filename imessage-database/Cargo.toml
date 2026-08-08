@@ -11,7 +11,7 @@ version = "0.0.0"
 
 [dependencies]
 chrono = "=0.4.42"
-plist = "=1.8.0"
+plist = "=1.10.0"
 rusqlite = { version = "=0.37.0", features = ["blob", "bundled"] }
 sha1 = "=0.10.6"
 protobuf = "=3.7.2"
